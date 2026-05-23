@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aetheria | Premium E-Commerce Store</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header>
+    <div class="container nav-container">
+      <a href="/pages/index.html" class="logo">AETHERIA<span>.</span></a>
+      <ul class="nav-links">
+        <li><a href="/pages/index.html" class="nav-item active">Home</a></li>
+        <li><a href="/pages/product.html" class="nav-item">Shop</a></li>
+      </ul>
+      <div class="nav-actions">
+        <a href="/pages/cart.html" class="cart-icon-wrapper">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="21" r="1"></circle>
+            <circle cx="20" cy="21" r="1"></circle>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+          </svg>
+          <span class="cart-badge">0</span>
+        </a>
+        <ul class="nav-links" id="nav-auth-links" style="margin-left: 20px;">
+          <!-- Loaded dynamically from auth.js -->
+        </ul>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container hero-content">
+      <span class="hero-subtitle">New Arrival Collection</span>
+      <h1>Experience Premium Luxury Technology & Apparel</h1>
+      <p>Handcrafted designs, state of the art gadgets, and ultra-high quality wearables curated precisely for the modern aesthetic enthusiast.</p>
+      <div style="display: flex; gap: 16px; justify-content: center;">
+        <a href="/pages/product.html" class="btn btn-primary">Browse Collection</a>
+        <a href="#categories" class="btn btn-secondary">Explore Categories</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Categories Section -->
+  <section id="categories" class="container" style="margin-top: 60px;">
+    <div class="section-header">
+      <h2 class="section-title">Shop by Category</h2>
+    </div>
+    <div class="grid" id="category-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px;">
+      <!-- Loaded dynamically -->
+      <div class="card flex-center" style="height: 120px; cursor: pointer;">Loading Categories...</div>
+    </div>
+  </section>
+
+  <!-- Featured Products Section -->
+  <section class="container" style="margin-top: 60px;">
+    <div class="section-header flex-between">
+      <h2 class="section-title">Featured Products</h2>
+      <a href="/pages/product.html" class="btn btn-secondary btn-sm">View All Products</a>
+    </div>
+    <div class="product-grid" id="featured-products-grid">
+      <!-- Loaded dynamically -->
+      <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">Loading Products...</div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2026 Aetheria. All rights reserved. Powered by Node.js & MongoDB.</p>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script type="module" src="/js/api.js"></script>
+  <script type="module" src="/js/auth.js"></script>
+  <script type="module" src="/js/cart.js"></script>
+  <script type="module">
+    import { apiRequest } from '/js/api.js';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Load Categories
+      try {
+        const catRes = await apiRequest('/api/products/categories');
+        const catGrid = document.getElementById('category-grid');
+        if (catRes.success && catRes.data.length > 0) {
+          catGrid.innerHTML = catRes.data.map(cat => `
+            <div class="card flex-center" style="height: 120px; cursor: pointer; flex-direction: column;" onclick="window.location.href='/pages/product.html?category=${cat._id}'">
+              <h3 style="font-size: 18px; margin-bottom: 4px;">${cat.name}</h3>
+              <p style="font-size: 12px; color: var(--text-secondary); text-align:center;">${cat.description || 'Explore goods'}</p>
+            </div>
+          `).join('');
+        } else {
+          catGrid.innerHTML = '<p>No categories found.</p>';
+        }
+      } catch (err) {
+        document.getElementById('category-grid').innerHTML = '<p>Failed to load categories.</p>';
+      }
+
+      // Load Featured Products (Get first 3 items)
+      try {
+        const prodRes = await apiRequest('/api/products?limit=3');
+        const prodGrid = document.getElementById('featured-products-grid');
+        if (prodRes.success && prodRes.data.products.length > 0) {
+          prodGrid.innerHTML = prodRes.data.products.map(prod => {
+            const ratingStars = '★'.repeat(Math.round(prod.rating)) + '☆'.repeat(5 - Math.round(prod.rating));
+            const img = (prod.images && prod.images.length > 0) ? prod.images[0] : '';
+            return `
+              <div class="card product-card" onclick="window.location.href='/pages/product-detail.html?id=${prod._id}'" style="cursor: pointer;">
+                <div class="product-image-wrapper">
+                  <img src="${img}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%25%22 height=%22100%25%22><rect width=%22100%25%22 height=%22100%25%22 fill=%22%231a1a2e%22/><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%236366f1%22 font-family=%22sans-serif%22 font-size=%2220%22 font-weight=%22bold%22>Aetheria</text></svg>';" class="product-image" alt="${prod.name}">
+                </div>
+                <div class="product-category">${prod.category ? prod.category.name : 'Uncategorized'}</div>
+                <h3 class="product-title">${prod.name}</h3>
+                <div class="product-rating">
+                  ${ratingStars} <span>(${prod.numReviews})</span>
+                </div>
+                <div class="product-price-row flex-between">
+                  <div class="product-price">$${prod.price.toFixed(2)}</div>
+                  <button class="btn btn-primary btn-sm add-to-cart-btn" data-id="${prod._id}" style="z-index: 10;">Add</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          // Bind add-to-cart click events
+          document.querySelectorAll('.add-to-cart-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              e.stopPropagation(); // prevent card click redirect
+              const prodId = btn.getAttribute('data-id');
+              const { addToCart } = await import('/js/cart.js');
+              // Fetch product info to add
+              const res = await apiRequest(`/api/products/${prodId}`);
+              if (res.success) {
+                addToCart(res.data);
+              }
+            });
+          });
+        } else {
+          prodGrid.innerHTML = '<p>No products found.</p>';
+        }
+      } catch (err) {
+        document.getElementById('featured-products-grid').innerHTML = '<p>Failed to load products.</p>';
+      }
+    });
+  </script>
+</body>
+</html>

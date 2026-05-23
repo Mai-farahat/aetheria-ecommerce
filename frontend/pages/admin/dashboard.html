@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard | Aetheria Control Panel</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header>
+    <div class="container nav-container">
+      <a href="/pages/index.html" class="logo">AETHERIA<span>.</span> ADMIN</a>
+      <ul class="nav-links">
+        <li><a href="/pages/index.html" class="nav-item">View Site</a></li>
+      </ul>
+      <div class="nav-actions">
+        <ul class="nav-links" id="nav-auth-links">
+          <!-- Loaded dynamically -->
+        </ul>
+      </div>
+    </div>
+  </header>
+
+  <!-- Admin Main Dashboard Container -->
+  <main class="container admin-layout">
+    
+    <!-- Sidebar navigation -->
+    <aside class="card admin-sidebar">
+      <ul style="list-style: none;">
+        <li><a href="/pages/admin/dashboard.html" class="admin-nav-item active">Dashboard Overview</a></li>
+        <li><a href="/pages/admin/products.html" class="admin-nav-item">Manage Products</a></li>
+        <li><a href="/pages/admin/orders.html" class="admin-nav-item">Manage Orders</a></li>
+      </ul>
+    </aside>
+
+    <!-- Admin Content Area -->
+    <section>
+      <div class="section-header">
+        <h1 class="section-title">Dashboard Overview</h1>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="admin-stats-grid">
+        <div class="card stats-card">
+          <div class="stats-title">Total Revenue</div>
+          <div class="stats-number" id="stats-revenue">$0.00</div>
+        </div>
+        <div class="card stats-card">
+          <div class="stats-title">Total Orders</div>
+          <div class="stats-number" id="stats-orders">0</div>
+        </div>
+        <div class="card stats-card">
+          <div class="stats-title">Total Products</div>
+          <div class="stats-number" id="stats-products">0</div>
+        </div>
+      </div>
+
+      <!-- Recent Orders panel -->
+      <div class="card">
+        <h2 style="font-size: 18px; margin-bottom: 20px;">Recent Operations Logs</h2>
+        <div class="table-responsive">
+          <table class="table" id="recent-orders-table">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Date</th>
+                <th>Total</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="recent-orders-tbody">
+              <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-secondary);">Loading logs...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2026 Aetheria. Admin operations center.</p>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script type="module" src="/js/api.js"></script>
+  <script type="module" src="/js/auth.js"></script>
+  <script type="module" src="/js/cart.js"></script>
+  <script type="module">
+    import { apiRequest } from '/js/api.js';
+    import { isAuthenticated, isAdmin } from '/js/auth.js';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Security Guard Route
+      if (!isAuthenticated() || !isAdmin()) {
+        window.location.href = '/pages/login.html';
+        return;
+      }
+
+      await loadStats();
+    });
+
+    async function loadStats() {
+      try {
+        const prodRes = await apiRequest('/api/products');
+        const orderRes = await apiRequest('/api/orders');
+
+        if (prodRes.success && orderRes.success) {
+          const productsCount = prodRes.data.total;
+          const orders = orderRes.data;
+
+          const ordersCount = orders.length;
+
+          // Compute revenue
+          const revenue = orders
+            .filter(o => o.status !== 'pending' && o.status !== 'cancelled')
+            .reduce((acc, curr) => acc + curr.totalAmount, 0);
+
+          document.getElementById('stats-revenue').innerText = `$${revenue.toFixed(2)}`;
+          document.getElementById('stats-orders').innerText = ordersCount;
+          document.getElementById('stats-products').innerText = productsCount;
+
+          // Render first 5 orders on table
+          const recentOrders = orders.slice(0, 5);
+          const tbody = document.getElementById('recent-orders-tbody');
+
+          if (recentOrders.length === 0) {
+            tbody.innerHTML = `
+              <tr>
+                <td colspan="5" style="text-align:center; color: var(--text-secondary);">No orders registered.</td>
+              </tr>
+            `;
+            return;
+          }
+
+          tbody.innerHTML = recentOrders.map(order => {
+            const dateStr = new Date(order.createdAt).toLocaleDateString();
+            const customerName = order.user ? order.user.name : 'Unknown User';
+            const badgeClass = `badge badge-${order.status}`;
+            return `
+              <tr>
+                <td style="font-family: monospace; font-size:12px;">#${order._id.substring(18)}</td>
+                <td>${customerName}</td>
+                <td>${dateStr}</td>
+                <td style="font-weight: 700;">$${order.totalAmount.toFixed(2)}</td>
+                <td><span class="${badgeClass}">${order.status}</span></td>
+              </tr>
+            `;
+          }).join('');
+        }
+      } catch (err) {
+        console.error('Stats loading error', err);
+      }
+    }
+  </script>
+</body>
+</html>

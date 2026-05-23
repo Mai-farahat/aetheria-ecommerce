@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checkout | Aetheria</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header>
+    <div class="container nav-container">
+      <a href="/pages/index.html" class="logo">AETHERIA<span>.</span></a>
+      <ul class="nav-links">
+        <li><a href="/pages/index.html" class="nav-item">Home</a></li>
+        <li><a href="/pages/product.html" class="nav-item">Shop</a></li>
+      </ul>
+      <div class="nav-actions">
+        <a href="/pages/cart.html" class="cart-icon-wrapper">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="21" r="1"></circle>
+            <circle cx="20" cy="21" r="1"></circle>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+          </svg>
+          <span class="cart-badge">0</span>
+        </a>
+        <ul class="nav-links" id="nav-auth-links" style="margin-left: 20px;">
+          <!-- Loaded dynamically -->
+        </ul>
+      </div>
+    </div>
+  </header>
+
+  <!-- Checkout Container -->
+  <main class="container cart-layout" style="margin: 40px auto;">
+    
+    <!-- Shipping Address Form Card -->
+    <section class="card">
+      <h2 style="font-size: 22px; margin-bottom: 24px;">Shipping Address</h2>
+      <form id="checkout-shipping-form">
+        <div class="form-group">
+          <label for="shipping-street">Street Address</label>
+          <input type="text" id="shipping-street" class="form-control" placeholder="123 Main St, Apt 4B" required>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="shipping-city">City</label>
+            <input type="text" id="shipping-city" class="form-control" placeholder="New York" required>
+          </div>
+          <div class="form-group">
+            <label for="shipping-zip">Zip/Postal Code</label>
+            <input type="text" id="shipping-zip" class="form-control" placeholder="10001" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px; height: 48px;">
+          Proceed to Secure Payment
+        </button>
+      </form>
+    </section>
+
+    <!-- Summary Details -->
+    <aside class="card" style="height: fit-content;" id="checkout-summary-card">
+      <h2 style="font-size: 18px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">Items Checklist</h2>
+      <div id="checkout-items-preview" style="display:flex; flex-direction:column; gap:12px; margin-bottom: 20px;">
+        <!-- Loaded dynamically -->
+      </div>
+      <div class="flex-between" style="border-top:1px solid var(--border-color); padding-top:16px; font-weight:700; font-size:18px;">
+        <span>Total Payable:</span>
+        <span id="checkout-total-val">$0.00</span>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2026 Aetheria. All rights reserved. Powered by Node.js & MongoDB.</p>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script type="module" src="/js/api.js"></script>
+  <script type="module" src="/js/auth.js"></script>
+  <script type="module" src="/js/cart.js"></script>
+  <script type="module" src="/js/checkout.js"></script>
+  <script type="module">
+    import { apiRequest } from '/js/api.js';
+    import { getCartItems, getCartSubtotal } from '/js/cart.js';
+    import { isAuthenticated } from '/js/auth.js';
+    import { processCheckout } from '/js/checkout.js';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!isAuthenticated()) {
+        window.location.href = `/pages/login.html?redirect=${encodeURIComponent(window.location.pathname)}`;
+        return;
+      }
+
+      const items = getCartItems();
+      if (items.length === 0) {
+        window.location.href = '/pages/cart.html';
+        return;
+      }
+
+      // Populate Items Summary preview
+      document.getElementById('checkout-total-val').innerText = `$${getCartSubtotal()}`;
+      document.getElementById('checkout-items-preview').innerHTML = items.map(item => `
+        <div class="flex-between" style="font-size:14px;">
+          <span style="color: var(--text-secondary); max-width:180px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">
+            ${item.name} <span style="font-weight:700;">x${item.qty}</span>
+          </span>
+          <span>$${(item.qty * item.price).toFixed(2)}</span>
+        </div>
+      `).join('');
+
+      // Fetch user to pre-fill address if exists
+      try {
+        const userRes = await apiRequest('/api/auth/me');
+        if (userRes.success && userRes.data.address) {
+          const addr = userRes.data.address;
+          if (addr.street) document.getElementById('shipping-street').value = addr.street;
+          if (addr.city) document.getElementById('shipping-city').value = addr.city;
+          if (addr.zip) document.getElementById('shipping-zip').value = addr.zip;
+        }
+      } catch (err) {
+        console.error('Failed to load profile for address auto-fill', err);
+      }
+
+      // Form submission
+      document.getElementById('checkout-shipping-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const street = document.getElementById('shipping-street').value;
+        const city = document.getElementById('shipping-city').value;
+        const zip = document.getElementById('shipping-zip').value;
+
+        const address = { street, city, zip };
+        
+        // Disable submit button during load
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        submitBtn.innerText = 'Processing Order...';
+        submitBtn.disabled = true;
+
+        await processCheckout(address);
+
+        // In case checkout fails or redirects slowly, restore button
+        submitBtn.innerText = 'Proceed to Secure Payment';
+        submitBtn.disabled = false;
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shop | Aetheria Catalog</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <header>
+    <div class="container nav-container">
+      <a href="/pages/index.html" class="logo">AETHERIA<span>.</span></a>
+      <ul class="nav-links">
+        <li><a href="/pages/index.html" class="nav-item">Home</a></li>
+        <li><a href="/pages/product.html" class="nav-item active">Shop</a></li>
+      </ul>
+      <div class="nav-actions">
+        <a href="/pages/cart.html" class="cart-icon-wrapper">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="21" r="1"></circle>
+            <circle cx="20" cy="21" r="1"></circle>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+          </svg>
+          <span class="cart-badge">0</span>
+        </a>
+        <ul class="nav-links" id="nav-auth-links" style="margin-left: 20px;">
+          <!-- Loaded dynamically -->
+        </ul>
+      </div>
+    </div>
+  </header>
+
+  <!-- Catalog Main Layout -->
+  <main class="container catalog-layout">
+    
+    <!-- Sidebar Filter Panel -->
+    <aside class="card filter-sidebar">
+      <div class="filter-group">
+        <h3 class="filter-title">Search</h3>
+        <input type="text" id="search-input" class="form-control" placeholder="Search products...">
+      </div>
+
+      <div class="filter-group">
+        <h3 class="filter-title">Category</h3>
+        <ul class="category-filter-list" id="sidebar-categories">
+          <li class="category-filter-item active" data-id="">All Categories</li>
+          <!-- Loaded dynamically -->
+        </ul>
+      </div>
+
+      <div class="filter-group">
+        <h3 class="filter-title">Price Range</h3>
+        <div class="form-row" style="margin-bottom: 12px;">
+          <input type="number" id="price-min" class="form-control" placeholder="Min" min="0">
+          <input type="number" id="price-max" class="form-control" placeholder="Max" min="0">
+        </div>
+        <button id="price-filter-btn" class="btn btn-secondary btn-sm" style="width: 100%;">Apply Price</button>
+      </div>
+
+      <button id="reset-filters-btn" class="btn btn-danger btn-sm" style="width: 100%;">Clear All Filters</button>
+    </aside>
+
+    <!-- Products Content Area -->
+    <section>
+      <!-- Catalog Controls Header -->
+      <div class="flex-between" style="margin-bottom: 24px;">
+        <p id="results-count" style="color: var(--text-secondary); font-size: 14px;">Showing 0 products</p>
+        <div class="flex" style="gap: 12px; align-items: center;">
+          <span style="font-size: 14px; color: var(--text-secondary);">Sort By:</span>
+          <select id="sort-select" class="form-control" style="width: 180px; padding: 6px 12px;">
+            <option value="newest">Newest</option>
+            <option value="price-asc">Price: Low to High</option>
+            <option value="price-desc">Price: High to Low</option>
+            <option value="rating">Top Rated</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Products Grid -->
+      <div class="product-grid" id="catalog-products-grid">
+        <!-- Loaded dynamically -->
+      </div>
+
+      <!-- Pagination Grid -->
+      <div class="flex-center" id="pagination-controls" style="margin-top: 40px; gap: 8px;">
+        <!-- Loaded dynamically -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2026 Aetheria. All rights reserved. Powered by Node.js & MongoDB.</p>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script type="module" src="/js/api.js"></script>
+  <script type="module" src="/js/auth.js"></script>
+  <script type="module" src="/js/cart.js"></script>
+  <script type="module">
+    import { apiRequest } from '/js/api.js';
+
+    // State Variables
+    let selectedCategory = new URLSearchParams(window.location.search).get('category') || '';
+    let searchQuery = '';
+    let minPrice = '';
+    let maxPrice = '';
+    let sortVal = 'newest';
+    let currentPage = 1;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Setup elements
+      const searchInput = document.getElementById('search-input');
+      const sortSelect = document.getElementById('sort-select');
+      const minPriceInput = document.getElementById('price-min');
+      const maxPriceInput = document.getElementById('price-max');
+      const priceFilterBtn = document.getElementById('price-filter-btn');
+      const resetFiltersBtn = document.getElementById('reset-filters-btn');
+
+      // Fetch active categories
+      try {
+        const catRes = await apiRequest('/api/products/categories');
+        const sidebarCats = document.getElementById('sidebar-categories');
+        if (catRes.success) {
+          sidebarCats.innerHTML = `
+            <li class="category-filter-item ${!selectedCategory ? 'active' : ''}" data-id="">All Categories</li>
+            ` + catRes.data.map(cat => `
+            <li class="category-filter-item ${selectedCategory === cat._id ? 'active' : ''}" data-id="${cat._id}">${cat.name}</li>
+          `).join('');
+
+          // Category click listeners
+          document.querySelectorAll('.category-filter-item').forEach(item => {
+            item.addEventListener('click', () => {
+              document.querySelectorAll('.category-filter-item').forEach(i => i.classList.remove('active'));
+              item.classList.add('active');
+              selectedCategory = item.getAttribute('data-id');
+              currentPage = 1;
+              loadCatalog();
+            });
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load categories', err);
+      }
+
+      // Search typing debounce
+      let searchTimeout;
+      searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          searchQuery = e.target.value;
+          currentPage = 1;
+          loadCatalog();
+        }, 40000000000); // Wait, make search work on pressing Enter or standard debounce of 500ms
+        // Let's do a simple 500ms debounce
+      });
+
+      // Actually let's bind keyup enter or a fast 300ms debounce
+      searchInput.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') {
+          searchQuery = searchInput.value;
+          currentPage = 1;
+          loadCatalog();
+        }
+      });
+      searchInput.addEventListener('blur', () => {
+        searchQuery = searchInput.value;
+        currentPage = 1;
+        loadCatalog();
+      });
+
+      // Sort changes
+      sortSelect.addEventListener('change', (e) => {
+        sortVal = e.target.value;
+        loadCatalog();
+      });
+
+      // Price filter clicks
+      priceFilterBtn.addEventListener('click', () => {
+        minPrice = minPriceInput.value;
+        maxPrice = maxPriceInput.value;
+        currentPage = 1;
+        loadCatalog();
+      });
+
+      // Reset filters
+      resetFiltersBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        sortSelect.value = 'newest';
+        minPriceInput.value = '';
+        maxPriceInput.value = '';
+        document.querySelectorAll('.category-filter-item').forEach(i => i.classList.remove('active'));
+        document.querySelector('.category-filter-item[data-id=""]').classList.add('active');
+        
+        selectedCategory = '';
+        searchQuery = '';
+        minPrice = '';
+        maxPrice = '';
+        sortVal = 'newest';
+        currentPage = 1;
+        loadCatalog();
+      });
+
+      // Load products initially
+      loadCatalog();
+    });
+
+    // Main API loader function
+    async function loadCatalog() {
+      const prodGrid = document.getElementById('catalog-products-grid');
+      prodGrid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px;">Fetching Catalog...</div>';
+
+      let queryParams = `?page=${currentPage}&limit=9`;
+      if (selectedCategory) queryParams += `&category=${selectedCategory}`;
+      if (searchQuery) queryParams += `&search=${encodeURIComponent(searchQuery)}`;
+      if (minPrice) queryParams += `&minPrice=${minPrice}`;
+      if (maxPrice) queryParams += `&maxPrice=${maxPrice}`;
+      if (sortVal) queryParams += `&sort=${sortVal}`;
+
+      try {
+        const res = await apiRequest(`/api/products${queryParams}`);
+        if (res.success) {
+          const { products, page, pages, total } = res.data;
+          
+          document.getElementById('results-count').innerText = `Showing ${products.length} of ${total} products`;
+
+          if (products.length === 0) {
+            prodGrid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color: var(--text-secondary);">No products match your criteria.</div>';
+            document.getElementById('pagination-controls').innerHTML = '';
+            return;
+          }
+
+          prodGrid.innerHTML = products.map(prod => {
+            const ratingStars = '★'.repeat(Math.round(prod.rating)) + '☆'.repeat(5 - Math.round(prod.rating));
+            const img = (prod.images && prod.images.length > 0) ? prod.images[0] : '';
+            return `
+              <div class="card product-card" onclick="window.location.href='/pages/product-detail.html?id=${prod._id}'" style="cursor: pointer;">
+                <div class="product-image-wrapper">
+                  <img src="${img}" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%25%22 height=%22100%25%22><rect width=%22100%25%22 height=%22100%25%22 fill=%22%231a1a2e%22/><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%236366f1%22 font-family=%22sans-serif%22 font-size=%2220%22 font-weight=%22bold%22>Aetheria</text></svg>';" class="product-image" alt="${prod.name}">
+                </div>
+                <div class="product-category">${prod.category ? prod.category.name : 'Uncategorized'}</div>
+                <h3 class="product-title">${prod.name}</h3>
+                <div class="product-rating">
+                  ${ratingStars} <span>(${prod.numReviews})</span>
+                </div>
+                <div class="product-price-row flex-between">
+                  <div class="product-price">$${prod.price.toFixed(2)}</div>
+                  <button class="btn btn-primary btn-sm add-to-cart-btn" data-id="${prod._id}">Add</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          // Add click events to cart add buttons
+          document.querySelectorAll('.add-to-cart-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              const prodId = btn.getAttribute('data-id');
+              const { addToCart } = await import('/js/cart.js');
+              const detailRes = await apiRequest(`/api/products/${prodId}`);
+              if (detailRes.success) {
+                addToCart(detailRes.data);
+              }
+            });
+          });
+
+          // Draw pagination controls
+          drawPagination(page, pages);
+        }
+      } catch (err) {
+        prodGrid.innerHTML = '<div style="grid-column: 1/-1; text-align:center; padding:40px; color: var(--danger-color);">Error loading products.</div>';
+      }
+    }
+
+    function drawPagination(page, pages) {
+      const wrapper = document.getElementById('pagination-controls');
+      if (pages <= 1) {
+        wrapper.innerHTML = '';
+        return;
+      }
+
+      let btnHTML = '';
+      for (let i = 1; i <= pages; i++) {
+        btnHTML += `
+          <button class="btn btn-sm ${i === page ? 'btn-primary' : 'btn-secondary'}" onclick="setPage(${i})">${i}</button>
+        `;
+      }
+      wrapper.innerHTML = btnHTML;
+    }
+
+    // Attach function to global scope so pagination buttons can trigger it
+    window.setPage = (pageNumber) => {
+      currentPage = pageNumber;
+      loadCatalog();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+  </script>
+</body>
+</html>
